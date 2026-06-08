@@ -36,8 +36,8 @@ extension RootSelectionSet {
       } else  {
         if let dictValue = value as? [String: Any] {
           result[key] = try convertToAnyHashableValueDict(dict: dictValue) as JSONValue
-        } else if let hashableValue = value as? AnyHashable {
-          result[key] = hashableValue as JSONValue
+        } else if let hashableValue = value as? any Hashable {
+          result[key] = Self.asJSONValue(hashableValue)
         } else {
           throw RootSelectionSetInitializeError.hasNonHashableValue
         }
@@ -56,12 +56,26 @@ extension RootSelectionSet {
         result.append(try convertToAnyHashableArray(array: array) as JSONValue)
       } else if let dict = value as? [String: Any] {
         result.append(try convertToAnyHashableValueDict(dict: dict) as JSONValue)
-      } else if let hashable = value as? AnyHashable {
-        result.append(hashable as JSONValue)
+      } else if let hashable = value as? any Hashable {
+        result.append(Self.asJSONValue(hashable))
       } else {
         throw RootSelectionSetInitializeError.hasNonHashableValue
       }
     }
     return result
+  }
+
+  /// Bridges a `Hashable` value to `JSONValue` (`any Sendable & Hashable`).
+  ///
+  /// `JSONValue` requires `Sendable`, but `Sendable` is a marker protocol with no
+  /// runtime metadata, so a value of unknown static type cannot be cast to it via
+  /// `as?`/`as`. Because a marker protocol contributes no witness table, `any Hashable`
+  /// and `any Sendable & Hashable` are runtime-layout-identical, so reinterpreting the
+  /// bits is sound, ARC-safe, and preserves the underlying value (verified for value and
+  /// reference types). Replaces the previous `as JSONValue` coercion, which relied on
+  /// `AnyHashable: Sendable` — a conformance that is no longer available on newer Swift
+  /// toolchains.
+  private static func asJSONValue(_ value: any Hashable) -> JSONValue {
+    unsafeBitCast(value, to: JSONValue.self)
   }
 }
